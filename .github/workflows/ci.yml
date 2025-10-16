@@ -6,12 +6,8 @@ on:
   push:
     branches: [ master, main ]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  lint:
+  build-dev:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -20,15 +16,39 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build development image
+    - name: Build and export development image
       uses: docker/build-push-action@v5
       with:
         context: .
         target: development
         tags: nab-bank-api:dev
-        load: true
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        outputs: type=docker,dest=/tmp/nab-bank-api-dev.tar
+        cache-from: type=gha,scope=dev
+        cache-to: type=gha,scope=dev,mode=max
+
+    - name: Upload development image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: nab-bank-api-dev-image
+        path: /tmp/nab-bank-api-dev.tar
+        retention-days: 1
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: build-dev
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download development image
+      uses: actions/download-artifact@v4
+      with:
+        name: nab-bank-api-dev-image
+        path: /tmp
+
+    - name: Load development image
+      run: |
+        docker load < /tmp/nab-bank-api-dev.tar
 
     - name: Run linting
       run: |
@@ -36,22 +56,20 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    needs: build-dev
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build development image
-      uses: docker/build-push-action@v5
+    - name: Download development image
+      uses: actions/download-artifact@v4
       with:
-        context: .
-        target: development
-        tags: nab-bank-api:dev
-        load: true
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        name: nab-bank-api-dev-image
+        path: /tmp
+
+    - name: Load development image
+      run: |
+        docker load < /tmp/nab-bank-api-dev.tar
 
     - name: Run tests with coverage
       run: |
@@ -60,6 +78,15 @@ jobs:
     - name: Generate coverage report
       run: |
         docker run --rm -v $(pwd):/app nab-bank-api:dev go tool cover -html=coverage.out -o coverage.html
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: |
+          coverage.out
+          coverage.html
+        retention-days: 7
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -93,7 +120,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [build-dev, lint, test]
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -108,8 +135,10 @@ jobs:
         target: production
         tags: nab-bank-api:latest
         load: true
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: |
+          type=gha,scope=dev
+          type=gha,scope=prod
+        cache-to: type=gha,scope=prod,mode=max
 
     - name: Test production image
       run: |
