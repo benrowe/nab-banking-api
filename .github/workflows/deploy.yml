@@ -1,9 +1,14 @@
 name: Build and Deploy
 
+# DISABLED: Uncomment the 'on' section below to enable automatic deployment
+# on:
+#   push:
+#     branches: [ master, main ]
+#     tags: [ 'v*' ]
+#   workflow_dispatch:
+
+# Manual trigger only for now
 on:
-  push:
-    branches: [ master, main ]
-    tags: [ 'v*' ]
   workflow_dispatch:
 
 env:
