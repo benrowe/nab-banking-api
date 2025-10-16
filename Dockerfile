@@ -46,6 +46,9 @@ RUN go install github.com/cosmtrek/air@v1.49.0
 # Install delve debugger
 RUN go install github.com/go-delve/delve/cmd/dlv@v1.21.2
 
+# Install golangci-lint
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
+
 # Create non-root user
 RUN adduser -D -g '' appuser
 
