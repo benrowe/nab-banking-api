@@ -22,43 +22,47 @@ make lint         # Run linting
 make fmt          # Format code
 ```
 
-### Docker Development Workflow
+### Dockerfile-based Development Workflow
 ```bash
-# Build the Docker image
+# Build production image
 make build
-# Or: docker build -t nab-bank-api .
+# Or: docker build --target production -t nab-bank-api .
 
-# Run the application
+# Build development image
+make build-dev
+# Or: docker build --target development -t nab-bank-api:dev .
+
+# Run the production application
 make run
 # Or: docker run -p 8080:8080 --env-file .env nab-bank-api
 
-# Run with volume mount for development
+# Run in development mode with live reload (using Air)
 make dev
-# Or: docker run -p 8080:8080 --env-file .env -v $(pwd):/app -w /app golang:1.21-alpine go run cmd/server/main.go
+# Or: docker run --rm -it -p 8080:8080 -p 40000:40000 --env-file .env -v $(pwd):/app nab-bank-api:dev
 
-# Run tests
+# Run tests (automatically builds dev image)
 make test
-# Or: docker run --rm -v $(pwd):/app -w /app golang:1.21-alpine go test ./...
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev go test ./...
 
 # Run tests with coverage
 make test-coverage
-# Or: docker run --rm -v $(pwd):/app -w /app golang:1.21-alpine go test -coverprofile=coverage.out ./...
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev go test -coverprofile=coverage.out ./...
 
-# Run linting (using golangci-lint)
+# Run linting (using built-in golangci-lint)
 make lint
-# Or: docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:latest golangci-lint run
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev golangci-lint run --timeout=5m
 
 # Format code
 make fmt
-# Or: docker run --rm -v $(pwd):/app -w /app golang:1.21-alpine go fmt ./...
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev go fmt ./...
 
 # Tidy dependencies
 make tidy
-# Or: docker run --rm -v $(pwd):/app -w /app golang:1.21-alpine go mod tidy
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev go mod tidy
 
 # Run specific test
 make test-single TEST=TestFunctionName PKG=./internal/service
-# Or: docker run --rm -v $(pwd):/app -w /app golang:1.21-alpine go test -run TestFunctionName ./internal/service
+# Or: docker run --rm -v $(pwd):/app nab-bank-api:dev go test -run TestFunctionName ./internal/service
 ```
 
 ### Docker Compose (if using)
@@ -82,36 +86,37 @@ docker-compose down
 make help
 
 # Development workflow
-make dev          # Run in development mode with live reload
-make test         # Run all tests
-make test-coverage # Run tests with coverage report
+make dev          # Run in development mode with live reload (auto-builds dev image)
+make test         # Run all tests (auto-builds dev image)
+make test-coverage # Run tests with coverage report (auto-builds dev image)
 make test-single  # Run specific test (TEST=TestName PKG=./pkg)
-make lint         # Run golangci-lint
-make fmt          # Format Go code
-make tidy         # Tidy Go modules
+make lint         # Run golangci-lint (auto-builds dev image)
+make fmt          # Format Go code (auto-builds dev image)
+make tidy         # Tidy Go modules (auto-builds dev image)
 
 # Build and deployment
-make build        # Build Docker image
-make run          # Run the application
+make build        # Build production Docker image
+make build-dev    # Build development Docker image
+make run          # Run the production application
 make push         # Build and push to registry
 
 # Project setup
 make setup        # Initial project setup (creates .env from example)
 make init         # Initialize Go module (MODULE=github.com/user/repo)
-make deps         # Download Go dependencies
+make deps         # Download Go dependencies (auto-builds dev image)
 
 # Development tools
-make debug        # Run with delve debugger on port 40000
-make shell        # Open shell in Go container
-make browser-test # Test browser automation setup
+make debug        # Run with delve debugger on port 40000 (auto-builds dev image)
+make shell        # Open shell in Go container (auto-builds dev image)
+make browser-test # Test browser automation setup (auto-builds dev image)
 
 # CI/CD commands
 make ci-lint      # CI-specific linting (exit on failure)
 make ci-test      # CI testing with race detection and coverage
-make security-scan # Run gosec security scanning
+make security-scan # Run gosec security scanning (auto-builds dev image)
 
 # Cleanup
-make clean        # Clean up Docker images and containers
+make clean        # Clean up Docker images and containers (both prod and dev)
 ```
 
 ## Architecture & Project Structure
@@ -132,7 +137,8 @@ make clean        # Clean up Docker images and containers
 ├── deployments/        # Docker, k8s configs
 ├── .github/
 │   └── workflows/      # GitHub Actions
-├── Dockerfile
+├── Dockerfile          # Multi-stage build (development + production)
+├── .air.toml          # Live reload configuration
 ├── docker-compose.yml
 └── go.mod
 ```
@@ -190,11 +196,13 @@ DOCKER_PASSWORD
 - Validate all external inputs
 
 ### Docker Best Practices
-- Use multi-stage builds to minimize image size
-- Run as non-root user
-- Use Alpine or distroless base images
-- Pin base image versions
-- Use .dockerignore to exclude unnecessary files
+- **Multi-stage builds**: Dockerfile includes separate builder, development, and production stages
+- **Non-root user**: All stages run as non-root user for security
+- **Alpine base images**: Minimal attack surface and smaller image size
+- **Optimized caching**: Go modules downloaded before copying source code
+- **Development tools**: Development stage includes Air for live reload and Delve debugger
+- **Browser automation**: All stages include Chromium and required dependencies
+- **Health checks**: Production stage includes health check endpoint monitoring
 
 ### Testing Strategy
 - Unit tests for all business logic
@@ -275,8 +283,7 @@ golang.org/x/net/html
 gorm.io/gorm
 github.com/lib/pq
 ```
-
-## Debugging in Docker
+### Debugging in Docker
 
 ### VS Code with Docker
 - Use Remote-Containers extension
@@ -285,9 +292,16 @@ github.com/lib/pq
 
 ### Debug Commands
 ```bash
-# Run with delve debugger
-docker run --rm -v $(pwd):/app -w /app -p 40000:40000 golang:1.21-alpine dlv debug --headless --listen=:40000 --api-version=2 cmd/server/main.go
+# Run with delve debugger (uses development image with pre-installed debugger)
+make debug
+# Or: docker run --rm -it -v $(pwd):/app -p 40000:40000 --env-file .env nab-bank-api:dev dlv debug --headless --listen=:40000 --api-version=2 cmd/server/main.go
 
-# Shell into running container
-docker exec -it container-name sh
+# Shell into development container
+make shell
+# Or: docker run --rm -it -v $(pwd):/app nab-bank-api:dev sh
+
+# Run development server with live reload
+make dev
+# This uses Air for automatic recompilation on file changes
+```
 ```
