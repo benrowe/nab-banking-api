@@ -55,16 +55,22 @@ func (c *NABClient) GetAccounts(ctx context.Context) ([]model.Account, error) {
 	// Perform login and scraping
 	var accounts []model.Account
 	err := chromedp.Run(timeoutCtx,
-		// Navigate to login page
-		chromedp.Navigate(c.config.LoginURL),
-		chromedp.WaitVisible(`form`, chromedp.ByQuery),
+		// Navigate to NAB homepage
+		chromedp.Navigate(c.config.BaseURL),
+		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+
+		// Click Login button in header
+		c.clickLoginButton(),
+
+		// Select Internet Banking from dropdown
+		c.selectInternetBanking(),
 
 		// Perform login
 		c.performLogin(),
 
 		// Wait for successful login and navigate to accounts
 		chromedp.WaitVisible(`body`, chromedp.ByQuery),
-		chromedp.Sleep(2*time.Second), // Give time for redirects
+		chromedp.Sleep(3*time.Second), // Give time for page to load
 
 		// Navigate to accounts page or scrape from dashboard
 		c.scrapeAccounts(&accounts),
@@ -87,6 +93,75 @@ func (c *NABClient) GetAccountTransactions(ctx context.Context, accountID string
 	// For now, return empty transactions as this requires more complex navigation
 	// This would be implemented similarly to GetAccounts but navigating to the specific account's transaction page
 	return []model.Transaction{}, nil
+}
+
+// clickLoginButton clicks the Login button in the header
+func (c *NABClient) clickLoginButton() chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		c.logger.Println("Clicking Login button...")
+		
+		// Common selectors for the Login button
+		loginButtonSelectors := []string{
+			`button[class*="login"]`,
+			`a[class*="login"]`,
+			`[role="button"][class*="login"]`,
+			`button[title*="Login"]`,
+			`a[title*="Login"]`,
+			`.header button`,
+			`.navigation button`,
+			`button`,
+			`a[href*="login"]`,
+		}
+
+		// Try each selector to find the login button
+		for _, selector := range loginButtonSelectors {
+			err := chromedp.WaitVisible(selector, chromedp.ByQuery).Do(ctx)
+			if err == nil {
+				c.logger.Printf("Found login button with selector: %s", selector)
+				return chromedp.Click(selector, chromedp.ByQuery).Do(ctx)
+			}
+			c.logger.Printf("Selector failed: %s - %v", selector, err)
+		}
+
+		// Take screenshot for debugging
+		c.takeScreenshot(ctx, "login_button_not_found")
+		return fmt.Errorf("could not find login button")
+	})
+}
+
+// selectInternetBanking selects Internet Banking from the dropdown menu
+func (c *NABClient) selectInternetBanking() chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		c.logger.Println("Selecting Internet Banking from dropdown...")
+		
+		// Wait for dropdown menu to appear
+		chromedp.Sleep(1 * time.Second).Do(ctx)
+		
+		// Common selectors for Internet Banking link
+		internetBankingSelectors := []string{
+			`a[href*="internet-banking"]`,
+			`a[href*="internetbanking"]`,
+			`a[title*="Internet Banking"]`,
+			`[role="menuitem"][href*="banking"]`,
+			`.dropdown a[href*="banking"]`,
+			`.menu a[href*="banking"]`,
+			`a[href*="personal/online-banking"]`,
+		}
+
+		// Try each selector to find the Internet Banking link
+		for _, selector := range internetBankingSelectors {
+			err := chromedp.WaitVisible(selector, chromedp.ByQuery).Do(ctx)
+			if err == nil {
+				c.logger.Printf("Found Internet Banking link with selector: %s", selector)
+				return chromedp.Click(selector, chromedp.ByQuery).Do(ctx)
+			}
+			c.logger.Printf("Internet Banking selector failed: %s - %v", selector, err)
+		}
+
+		// Take screenshot for debugging
+		c.takeScreenshot(ctx, "internet_banking_not_found")
+		return fmt.Errorf("could not find Internet Banking link in dropdown")
+	})
 }
 
 // performLogin performs the login sequence
