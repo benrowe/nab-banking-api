@@ -1,0 +1,258 @@
+openapi: 3.0.3
+info:
+  title: NAB Bank API
+  description: API for accessing NAB bank account information via automated browser interaction
+  version: 1.0.0
+  contact:
+    name: NAB Bank API
+    url: https://github.com/benrowe/nab-bank-api
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  /api/v1/accounts:
+    get:
+      summary: List all bank accounts
+      description: Retrieve a list of all bank accounts associated with the authenticated user
+      operationId: listAccounts
+      tags:
+        - accounts
+      responses:
+        '200':
+          description: Successfully retrieved accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service unavailable (NAB website unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/accounts/{accountId}:
+    get:
+      summary: Get account details
+      description: Retrieve detailed information for a specific account
+      operationId: getAccount
+      tags:
+        - accounts
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: The unique identifier for the account
+          schema:
+            type: string
+            example: "12345678"
+      responses:
+        '200':
+          description: Successfully retrieved account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailsResponse'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Account:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - balance
+      properties:
+        id:
+          type: string
+          description: Unique account identifier
+          example: "12345678"
+        name:
+          type: string
+          description: Account display name
+          example: "Complete Access Account"
+        type:
+          type: string
+          description: Type of account
+          enum: [savings, checking, credit, loan, investment]
+          example: "savings"
+        balance:
+          $ref: '#/components/schemas/Money'
+        availableBalance:
+          $ref: '#/components/schemas/Money'
+        accountNumber:
+          type: string
+          description: Masked account number for display
+          example: "****1234"
+        bsb:
+          type: string
+          description: Bank State Branch code (for Australian accounts)
+          pattern: '^[0-9]{6}$'
+          example: "084001"
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Timestamp when the account data was last retrieved
+          example: "2023-10-17T04:55:06Z"
+
+    Money:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: string
+          description: Monetary amount as a decimal string to avoid floating-point precision issues
+          pattern: '^-?\d+\.\d{2}$'
+          example: "1234.56"
+
+    AccountsResponse:
+      type: object
+      required:
+        - accounts
+        - retrievedAt
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+        retrievedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the accounts data was retrieved
+          example: "2023-10-17T04:55:06Z"
+        count:
+          type: integer
+          description: Number of accounts returned
+          example: 3
+
+    AccountDetailsResponse:
+      type: object
+      required:
+        - account
+      properties:
+        account:
+          $ref: '#/components/schemas/AccountDetails'
+
+    AccountDetails:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            transactions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Transaction'
+              description: Recent transactions for this account
+            recentTransactionCount:
+              type: integer
+              description: Number of recent transactions included
+              example: 10
+
+    Transaction:
+      type: object
+      required:
+        - id
+        - date
+        - description
+        - amount
+        - balance
+      properties:
+        id:
+          type: string
+          description: Unique transaction identifier
+          example: "txn_20231017_001"
+        date:
+          type: string
+          format: date
+          description: Transaction date
+          example: "2023-10-17"
+        description:
+          type: string
+          description: Transaction description
+          example: "EFTPOS Purchase - COLES SUPERMARKET"
+        amount:
+          $ref: '#/components/schemas/Money'
+        balance:
+          $ref: '#/components/schemas/Money'
+        category:
+          type: string
+          description: Transaction category
+          example: "Groceries"
+        merchant:
+          type: string
+          description: Merchant name
+          example: "COLES SUPERMARKET"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "AUTHENTICATION_FAILED"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid credentials provided"
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2023-10-17T04:55:06Z"
+
+tags:
+  - name: accounts
+    description: Bank account operations
