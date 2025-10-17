@@ -57,7 +57,7 @@ dev: build-dev
 ## Run all tests
 test: build-dev
 	@echo "${YELLOW}Running tests...${RESET}"
-	docker run --rm -v $$(pwd):/app $(APP_NAME):dev go test ./...
+	docker run --rm -v $$(pwd):/app --user root $(APP_NAME):dev go test ./...
 
 ## Run tests with coverage
 test-coverage: build-dev
