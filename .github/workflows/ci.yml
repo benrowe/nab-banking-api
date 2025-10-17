@@ -73,11 +73,11 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        docker run --rm -v $(pwd):/app -e CGO_ENABLED=1 nab-bank-api:dev go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        docker run --rm -v $(pwd):/app -e CGO_ENABLED=1 --user root nab-bank-api:dev go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Generate coverage report
       run: |
-        docker run --rm -v $(pwd):/app nab-bank-api:dev go tool cover -html=coverage.out -o coverage.html
+        docker run --rm -v $(pwd):/app --user root nab-bank-api:dev go tool cover -html=coverage.out -o coverage.html
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
